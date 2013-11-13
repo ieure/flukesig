@@ -42,10 +42,10 @@ def checksum(inp):
 
         # Decrement offsets
         # The offsets array contains a list of pointers which sweep
-        # downwards through the range of `buf'. After each pass
-        # through the loop, we decrement each pointer, resetting it
-        # back to the last element of `buf' when it reaches the lower
-        # bound.
+        # downwards through the range of `buf'. Each pointer in
+        # `offsets' is decremented after the XOR operation, resetting
+        # it back to the last element of `buf' when it reaches the
+        # lower bound.
         offsets = [(x - 1) % len(buf) for x in offsets]
 
     # Final checksum calculation. I don't understand all of this code yet.
