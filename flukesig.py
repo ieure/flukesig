@@ -17,7 +17,8 @@ def readbytes(inp):
     """Return an array of bytes read from inp."""
     buf = array("B")
     try:
-        buf.fromfile(inp, 1024)
+        while True:
+            buf.fromfile(inp, 1024)
     except EOFError:
         pass
     return buf
