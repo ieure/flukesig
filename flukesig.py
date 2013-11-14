@@ -8,19 +8,25 @@
 """Fluke 9010a checksum tool."""
 
 import sys
+import zipfile
 from operator import xor, itemgetter
+from itertools import chain
+from contextlib import closing
 from array import array
 from optparse import OptionParser
+from os.path import basename
+
+BLOCK_SIZE = 1024               # Read this many bytes at a time
 
 
 def readbytes(inp):
     """Return an array of bytes read from inp."""
     buf = array("B")
-    try:
-        while True:
-            buf.fromfile(inp, 1024)
-    except EOFError:
-        pass
+    done = False
+    while not done:
+        temp = inp.read(BLOCK_SIZE)
+        buf.fromstring(temp)
+        done = len(temp) < BLOCK_SIZE
     return buf
 
 
@@ -61,19 +67,50 @@ def checksum(inp):
 
 def get_parser():
     """Return an OptionParser."""
-    return OptionParser("""Usage: %prog file1 file2 ... fileN
+    parser = OptionParser("""Usage: %prog file1 file2 ... fileN
 
     Calculates the checksum of specified files using the Fluke 9010a
     algorithm.""")
 
+    parser.add_option("--no-unzip", action="store_false", default=True,
+                      help="Disable checksumming files inside ZIP archives.")
+    parser.add_option("-s", "--short",
+                      action="store_true", default=False,
+                      help="Omit directory names from output.")
+
+    return parser
+
+
+def gen_zip_fds(inpf, fd):
+    """Return a generator of (filename, fd).
+
+       The generator returns the files inside the ZIP archive.
+    """
+    with closing(zipfile.ZipFile(fd)) as zfd:
+        for zfn in zfd.namelist():
+            with closing(zfd.open(zfn)) as fd:
+                yield ("%s:%s" % (inpf, zfn), fd)
+
+
+def gen_fds(args, unzip=True):
+    """Return a generator of tuples of (filename, fd) for the inputs.
+
+       If unzip is set to False, ZIP files will be checksummed, rather
+       than the files inside them."""
+    for inpf in args:
+        with open(inpf, "rb") as fd:
+            if unzip and zipfile.is_zipfile(inpf):
+                yield gen_zip_fds(inpf, fd)
+            else:
+                yield ((inpf, fd),)
+
 
 def main(argv):
     parser = get_parser()
-    (_, args) = parser.parse_args(argv)
-    for inpf in args:
-        with open(inpf, "rb") as inp:
-            cksum = checksum(inp)
-            print "%s %04x" % (inpf, cksum)
+    (opts, args) = parser.parse_args(argv)
+    for (inpf, fd) in chain.from_iterable(gen_fds(args, opts.no_unzip)):
+        print "%s %04x" % (basename(inpf) if opts.short else inpf,
+                           checksum(fd))
 
 
 if __name__ == '__main__':
